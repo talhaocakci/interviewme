@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { View, StyleSheet, Text, Platform } from 'react-native';
-import { Button, ActivityIndicator, IconButton } from 'react-native-paper';
+import { View, StyleSheet, Text, Platform, Linking } from 'react-native';
+import { Button, ActivityIndicator, IconButton, Dialog, Portal, Paragraph } from 'react-native-paper';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import apiService from '../services/api';
 import roomWebSocket from '../services/roomWebSocket';
-import { API_BASE_URL } from '../utils/constants';
+import { API_BASE_URL, WEBRTC_CONFIG } from '../utils/constants';
+import { getBrowserInfo, getUnsupportedBrowserMessage } from '../utils/browserDetect';
 
 export default function VideoRoomScreen() {
   const route = useRoute();
@@ -19,6 +20,13 @@ export default function VideoRoomScreen() {
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [remotePeerId, setRemotePeerId] = useState<string | null>(null);
   const [cameraStatus, setCameraStatus] = useState('Requesting camera access...');
+  const [browserWarningVisible, setBrowserWarningVisible] = useState(false);
+  const [iceConnectionState, setIceConnectionState] = useState<string>('new');
+  const [connectionState, setConnectionState] = useState<string>('new');
+  const [isReconnecting, setIsReconnecting] = useState(false);
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const maxReconnectAttempts = 3;
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -91,6 +99,18 @@ export default function VideoRoomScreen() {
 
   const startCall = async () => {
     try {
+      // Check browser compatibility first
+      const browserInfo = getBrowserInfo();
+      const unsupportedMessage = getUnsupportedBrowserMessage();
+      
+      if (unsupportedMessage) {
+        console.error('Unsupported browser detected:', browserInfo);
+        setCameraStatus(unsupportedMessage.message);
+        setError(unsupportedMessage.message);
+        setBrowserWarningVisible(true);
+        return;
+      }
+      
       setCameraStatus('Requesting camera and microphone access...');
       console.log('Requesting camera and microphone access...');
       
@@ -207,17 +227,45 @@ export default function VideoRoomScreen() {
     }
   };
 
+  const attemptReconnection = (peerId: string) => {
+    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+      console.error(`❌ Max reconnection attempts (${maxReconnectAttempts}) reached`);
+      setError('Connection lost. Please refresh the page to rejoin.');
+      setIsReconnecting(false);
+      return;
+    }
+
+    reconnectAttemptsRef.current += 1;
+    setIsReconnecting(true);
+    console.log(`🔄 Reconnection attempt ${reconnectAttemptsRef.current}/${maxReconnectAttempts}`);
+
+    // Close existing connection
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+
+    // Wait a bit before reconnecting
+    setTimeout(() => {
+      console.log('Creating new peer connection for reconnection...');
+      createPeerConnection(peerId);
+      
+      // Determine who should create the offer (same logic as before)
+      const myConnectionId = roomWebSocket.getConnectionId();
+      if (myConnectionId && myConnectionId > peerId) {
+        console.log('🔄 Creating new offer after reconnection');
+        setTimeout(() => createOffer(peerId), 500);
+      } else {
+        console.log('⏳ Waiting for offer from peer after reconnection');
+      }
+    }, 1000);
+  };
+
   const createPeerConnection = (peerId: string) => {
     console.log('🔗 Creating peer connection for:', peerId);
+    console.log('Using ICE servers:', WEBRTC_CONFIG.iceServers);
     
-    const config: RTCConfiguration = {
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-      ]
-    };
-    
-    const pc = new RTCPeerConnection(config);
+    const pc = new RTCPeerConnection(WEBRTC_CONFIG);
     peerConnectionRef.current = pc;
     
     // Add local tracks to peer connection
@@ -267,16 +315,51 @@ export default function VideoRoomScreen() {
     // Handle ICE connection state
     pc.oniceconnectionstatechange = () => {
       console.log('🧊 ICE connection state:', pc.iceConnectionState);
+      setIceConnectionState(pc.iceConnectionState);
+      
+      if (pc.iceConnectionState === 'failed') {
+        console.error('❌ ICE connection failed - attempting to reconnect...');
+        attemptReconnection(peerId);
+      } else if (pc.iceConnectionState === 'disconnected') {
+        console.warn('⚠️ ICE connection disconnected - will attempt reconnection if not recovered');
+        // Give it a few seconds to recover naturally before forcing reconnection
+        reconnectTimeoutRef.current = setTimeout(() => {
+          if (pc.iceConnectionState === 'disconnected') {
+            console.log('Still disconnected after 5s, attempting reconnection...');
+            attemptReconnection(peerId);
+          }
+        }, 5000);
+      } else if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+        console.log('✅ ICE connection established!');
+        // Clear any pending reconnection attempts
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = null;
+        }
+        reconnectAttemptsRef.current = 0;
+        setIsReconnecting(false);
+      }
+    };
+    
+    // Handle ICE gathering state
+    pc.onicegatheringstatechange = () => {
+      console.log('🔍 ICE gathering state:', pc.iceGatheringState);
     };
     
     // Handle connection state
     pc.onconnectionstatechange = () => {
       console.log('🔌 Connection state:', pc.connectionState);
+      setConnectionState(pc.connectionState);
       
       if (pc.connectionState === 'connected') {
         console.log('✅✅✅ PEER CONNECTION ESTABLISHED! ✅✅✅');
+        setIsCallActive(true);
       } else if (pc.connectionState === 'failed') {
         console.error('❌ Peer connection failed');
+        setError('Connection failed. Please check your network and try again.');
+      } else if (pc.connectionState === 'disconnected') {
+        console.warn('⚠️ Peer connection disconnected');
+        setIsCallActive(false);
       }
     };
     
@@ -424,6 +507,12 @@ export default function VideoRoomScreen() {
   const cleanup = () => {
     console.log('🧹 Cleaning up room...');
     
+    // Clear reconnection timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
     // Stop local stream
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());
@@ -477,9 +566,18 @@ export default function VideoRoomScreen() {
           style={styles.remoteVideo as any}
         />
         
-        {!remotePeerId && (
+        {!remotePeerId && !isReconnecting && (
           <View style={styles.waitingOverlay}>
             <Text style={styles.waitingText}>Waiting for someone to join...</Text>
+          </View>
+        )}
+        
+        {isReconnecting && (
+          <View style={styles.waitingOverlay}>
+            <ActivityIndicator size="large" color="#fff" />
+            <Text style={styles.waitingText}>
+              Reconnecting... ({reconnectAttemptsRef.current}/{maxReconnectAttempts})
+            </Text>
           </View>
         )}
       </View>
@@ -528,12 +626,52 @@ export default function VideoRoomScreen() {
       {/* Room Info */}
       <View style={styles.roomInfo}>
         <Text style={styles.roomInfoText}>
-          {roomData?.name} • {remotePeerId ? 'Connected' : 'Waiting'}
+          {roomData?.name} • {isReconnecting ? '🔄 Reconnecting' : remotePeerId ? '✅ Connected' : '⏳ Waiting'}
         </Text>
         {!isCallActive && (
           <Text style={styles.cameraStatus}>{cameraStatus}</Text>
         )}
+        {isReconnecting && (
+          <Text style={styles.reconnectText}>
+            Attempt {reconnectAttemptsRef.current}/{maxReconnectAttempts}
+          </Text>
+        )}
+        <Text style={styles.debugText}>
+          🔌 {connectionState} | 🧊 {iceConnectionState}
+        </Text>
       </View>
+
+      {/* Browser Compatibility Warning Dialog */}
+      <Portal>
+        <Dialog visible={browserWarningVisible} onDismiss={() => setBrowserWarningVisible(false)}>
+          <Dialog.Title>Browser Not Supported</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph>
+              Chrome on iOS does not support video calls. Please open this page in Safari instead.
+            </Paragraph>
+            <Paragraph style={{ marginTop: 10, fontSize: 12, color: '#666' }}>
+              On iOS, only Safari supports WebRTC (camera and microphone access).
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setBrowserWarningVisible(false)}>Close</Button>
+            <Button 
+              mode="contained" 
+              onPress={() => {
+                // Copy current URL to help user open in Safari
+                const currentUrl = window.location.href;
+                // Try to open in Safari (may not work on all iOS versions)
+                Linking.openURL(currentUrl).catch(() => {
+                  // If it fails, just show an alert
+                  alert('Please copy this URL and paste it in Safari browser');
+                });
+              }}
+            >
+              Open in Safari
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 }
@@ -619,6 +757,18 @@ const styles = StyleSheet.create({
     color: '#ffc107',
     fontSize: 12,
     marginTop: 4,
+  },
+  reconnectText: {
+    color: '#ff9800',
+    fontSize: 11,
+    marginTop: 2,
+    fontWeight: 'bold',
+  },
+  debugText: {
+    color: '#aaa',
+    fontSize: 10,
+    marginTop: 4,
+    fontFamily: 'monospace',
   },
   text: {
     color: '#fff',

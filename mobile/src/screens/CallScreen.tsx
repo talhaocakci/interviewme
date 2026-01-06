@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, StyleSheet, Dimensions, Platform } from 'react-native';
-import { Text, IconButton, Avatar, Button } from 'react-native-paper';
+import { View, StyleSheet, Dimensions, Platform, Linking } from 'react-native';
+import { Text, IconButton, Avatar, Button, Dialog, Portal, Paragraph } from 'react-native-paper';
+import { getBrowserInfo, getUnsupportedBrowserMessage } from '../utils/browserDetect';
 
 const { width } = Dimensions.get('window');
 
@@ -14,6 +15,7 @@ export default function CallScreen({ navigation }: any) {
   const [error, setError] = useState<string | null>(null);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [cameraStream, setCameraStream] = useState<any>(null); // Store original camera stream
+  const [browserWarningVisible, setBrowserWarningVisible] = useState(false);
   
   // Use ref to prevent video element recreation on re-renders
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -43,6 +45,17 @@ export default function CallScreen({ navigation }: any) {
   const initializeCall = async () => {
     try {
       setError(null);
+      
+      // Check browser compatibility first
+      const browserInfo = getBrowserInfo();
+      const unsupportedMessage = getUnsupportedBrowserMessage();
+      
+      if (unsupportedMessage) {
+        console.error('Unsupported browser detected:', browserInfo);
+        setError(unsupportedMessage.message);
+        setBrowserWarningVisible(true);
+        return;
+      }
       
       const stream = await navigator.mediaDevices.getUserMedia({ 
         video: {
@@ -323,6 +336,35 @@ export default function CallScreen({ navigation }: any) {
           </View>
         </>
       )}
+
+      {/* Browser Compatibility Warning Dialog */}
+      <Portal>
+        <Dialog visible={browserWarningVisible} onDismiss={() => setBrowserWarningVisible(false)}>
+          <Dialog.Title>Browser Not Supported</Dialog.Title>
+          <Dialog.Content>
+            <Paragraph>
+              Chrome on iOS does not support video calls. Please open this page in Safari instead.
+            </Paragraph>
+            <Paragraph style={{ marginTop: 10, fontSize: 12, color: '#666' }}>
+              On iOS, only Safari supports WebRTC (camera and microphone access).
+            </Paragraph>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setBrowserWarningVisible(false)}>Close</Button>
+            <Button 
+              mode="contained" 
+              onPress={() => {
+                const currentUrl = window.location.href;
+                Linking.openURL(currentUrl).catch(() => {
+                  alert('Please copy this URL and paste it in Safari browser');
+                });
+              }}
+            >
+              Open in Safari
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
     </View>
   );
 }

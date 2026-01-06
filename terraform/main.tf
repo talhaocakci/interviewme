@@ -17,6 +17,12 @@ provider "aws" {
   region = var.aws_region
 }
 
+# Provider for us-east-1 (required for ACM certificates used with CloudFront)
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
 # Generate JWT secret if not provided
 resource "random_password" "jwt_secret" {
   length  = 32

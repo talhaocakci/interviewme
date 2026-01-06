@@ -60,6 +60,7 @@ resource "aws_cloudfront_distribution" "web_app" {
   comment             = "${var.project_name} Web App - ${var.environment}"
   default_root_object = "index.html"
   price_class         = "PriceClass_100" # Use only North America and Europe
+  aliases             = ["calls.contentpub.io"]
 
   origin {
     domain_name              = aws_s3_bucket.web_app.bucket_regional_domain_name
@@ -148,11 +149,9 @@ resource "aws_cloudfront_distribution" "web_app" {
   }
 
   viewer_certificate {
-    cloudfront_default_certificate = true
-    # To use custom domain:
-    # acm_certificate_arn      = var.acm_certificate_arn
-    # ssl_support_method       = "sni-only"
-    # minimum_protocol_version = "TLSv1.2_2021"
+    acm_certificate_arn      = aws_acm_certificate.web_app.arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
   }
 
   tags = {

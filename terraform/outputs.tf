@@ -90,6 +90,11 @@ output "cloudfront_domain_name" {
 
 output "web_app_url" {
   description = "Web application URL"
+  value       = "https://calls.contentpub.io"
+}
+
+output "cloudfront_url" {
+  description = "CloudFront distribution URL (fallback)"
   value       = "https://${aws_cloudfront_distribution.web_app.domain_name}"
 }
 

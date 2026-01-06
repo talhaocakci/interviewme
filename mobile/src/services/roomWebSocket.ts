@@ -43,6 +43,12 @@ class RoomWebSocketService {
             const data = JSON.parse(event.data);
             console.log('📨 WebSocket message received:', data.type, data);
             
+            // Store connection ID if provided
+            if (data.connection_id) {
+              this.connectionId = data.connection_id;
+              console.log('Stored connection ID:', this.connectionId);
+            }
+            
             // Call all registered handlers for this message type
             const handlers = this.messageHandlers.get(data.type) || [];
             console.log(`Found ${handlers.length} handlers for type: ${data.type}`);
@@ -120,6 +126,10 @@ class RoomWebSocketService {
     this.roomId = null;
     this.connectionId = null;
     this.reconnectAttempts = 0;
+  }
+
+  getConnectionId(): string | null {
+    return this.connectionId;
   }
 
   // WebRTC signaling methods

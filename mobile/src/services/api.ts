@@ -232,6 +232,39 @@ class ApiService {
     });
     return response.data;
   }
+
+  // Room Management
+  async createRoom(name: string, maxParticipants: number = 2) {
+    const response = await this.client.post('/room/create', {
+      name,
+      max_participants: maxParticipants,
+    });
+    return response.data;
+  }
+
+  async joinRoom(roomId: string) {
+    const response = await this.client.post('/room/join', {
+      room_id: roomId,
+    });
+    return response.data;
+  }
+
+  async getRoom(roomId: string) {
+    const response = await this.client.get(`/room/${roomId}`);
+    return response.data;
+  }
+
+  async listRooms() {
+    const response = await this.client.get('/rooms');
+    return response.data;
+  }
+
+  async leaveRoom(roomId: string) {
+    const response = await this.client.post('/room/leave', {
+      room_id: roomId,
+    });
+    return response.data;
+  }
 }
 
 export default new ApiService();

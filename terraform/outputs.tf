@@ -53,9 +53,12 @@ output "websocket_url" {
 output "lambda_functions" {
   description = "Lambda function names"
   value = {
-    auth      = aws_lambda_function.auth.function_name
-    chat      = aws_lambda_function.chat.function_name
-    websocket = aws_lambda_function.websocket.function_name
+    auth                 = aws_lambda_function.auth.function_name
+    chat                 = aws_lambda_function.chat.function_name
+    room                 = aws_lambda_function.room.function_name
+    websocket_connect    = aws_lambda_function.websocket_connect.function_name
+    websocket_disconnect = aws_lambda_function.websocket_disconnect.function_name
+    websocket_message    = aws_lambda_function.websocket_message.function_name
   }
 }
 

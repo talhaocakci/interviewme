@@ -30,8 +30,10 @@
       ]
     },
     "web": {
-      "bundler": "metro"
+      "bundler": "metro",
+      "favicon": "./assets/favicon.png"
     },
+    "scheme": "chatvideoapp",
     "plugins": [
       [
         "expo-camera",

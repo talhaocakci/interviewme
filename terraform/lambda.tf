@@ -51,28 +51,96 @@ resource "aws_lambda_function" "chat" {
   }
 }
 
-# WebSocket Lambda Function
-resource "aws_lambda_function" "websocket" {
-  filename      = "../lambda/websocket.zip"
-  function_name = "${var.project_name}-websocket-${var.environment}"
+# Room Lambda Function
+resource "aws_lambda_function" "room" {
+  filename      = "../lambda/room.zip"
+  function_name = "${var.project_name}-room-${var.environment}"
   role          = aws_iam_role.lambda_execution.arn
-  handler       = "handler.connect"
+  handler       = "handler.handler"
   runtime       = "python3.11"
-  timeout       = 300  # WebSocket needs longer timeout
+  timeout       = 30
+  memory_size   = 256
+
+  environment {
+    variables = {
+      DYNAMODB_TABLE = aws_dynamodb_table.main.name
+    }
+  }
+
+  source_code_hash = fileexists("../lambda/room.zip") ? filebase64sha256("../lambda/room.zip") : ""
+
+  tags = {
+    Name        = "${var.project_name}-room"
+    Environment = var.environment
+  }
+}
+
+# WebSocket Lambda Function
+resource "aws_lambda_function" "websocket_connect" {
+  filename      = "../lambda/websocket.zip"
+  function_name = "${var.project_name}-websocket-connect-${var.environment}"
+  role          = aws_iam_role.lambda_execution.arn
+  handler       = "room_handler.connect_handler"
+  runtime       = "python3.11"
+  timeout       = 300
   memory_size   = 512
 
   environment {
     variables = {
-      DYNAMODB_TABLE    = aws_dynamodb_table.main.name
-      WEBSOCKET_API_ID  = aws_apigatewayv2_api.websocket.id
-      STAGE             = var.environment
+      DYNAMODB_TABLE = aws_dynamodb_table.main.name
     }
   }
 
   source_code_hash = fileexists("../lambda/websocket.zip") ? filebase64sha256("../lambda/websocket.zip") : ""
 
   tags = {
-    Name        = "${var.project_name}-websocket"
+    Name        = "${var.project_name}-websocket-connect"
+    Environment = var.environment
+  }
+}
+
+resource "aws_lambda_function" "websocket_disconnect" {
+  filename      = "../lambda/websocket.zip"
+  function_name = "${var.project_name}-websocket-disconnect-${var.environment}"
+  role          = aws_iam_role.lambda_execution.arn
+  handler       = "room_handler.disconnect_handler"
+  runtime       = "python3.11"
+  timeout       = 300
+  memory_size   = 512
+
+  environment {
+    variables = {
+      DYNAMODB_TABLE = aws_dynamodb_table.main.name
+    }
+  }
+
+  source_code_hash = fileexists("../lambda/websocket.zip") ? filebase64sha256("../lambda/websocket.zip") : ""
+
+  tags = {
+    Name        = "${var.project_name}-websocket-disconnect"
+    Environment = var.environment
+  }
+}
+
+resource "aws_lambda_function" "websocket_message" {
+  filename      = "../lambda/websocket.zip"
+  function_name = "${var.project_name}-websocket-message-${var.environment}"
+  role          = aws_iam_role.lambda_execution.arn
+  handler       = "room_handler.message_handler"
+  runtime       = "python3.11"
+  timeout       = 300
+  memory_size   = 512
+
+  environment {
+    variables = {
+      DYNAMODB_TABLE = aws_dynamodb_table.main.name
+    }
+  }
+
+  source_code_hash = fileexists("../lambda/websocket.zip") ? filebase64sha256("../lambda/websocket.zip") : ""
+
+  tags = {
+    Name        = "${var.project_name}-websocket-message"
     Environment = var.environment
   }
 }
@@ -94,10 +162,34 @@ resource "aws_lambda_permission" "api_gateway_chat" {
   source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
 }
 
-resource "aws_lambda_permission" "api_gateway_websocket" {
+resource "aws_lambda_permission" "api_gateway_room" {
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
-  function_name = aws_lambda_function.websocket.function_name
+  function_name = aws_lambda_function.room.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.main.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "api_gateway_websocket_connect" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.websocket_connect.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.websocket.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "api_gateway_websocket_disconnect" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.websocket_disconnect.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.websocket.execution_arn}/*/*"
+}
+
+resource "aws_lambda_permission" "api_gateway_websocket_message" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.websocket_message.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.websocket.execution_arn}/*/*"
 }

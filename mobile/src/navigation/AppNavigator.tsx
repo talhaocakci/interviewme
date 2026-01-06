@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useDispatch, useSelector } from 'react-redux';
-import { Icon } from 'react-native-paper';
+import { Icon, IconButton } from 'react-native-paper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { RootState } from '../store';
 import { restoreAuth, logout } from '../store/slices/authSlice';
@@ -17,6 +17,8 @@ import ConversationsScreen from '../screens/ConversationsScreen';
 import NewConversationScreen from '../screens/NewConversationScreen';
 import ChatScreen from '../screens/ChatScreen';
 import CallScreen from '../screens/CallScreen';
+import CreateRoomScreen from '../screens/CreateRoomScreen';
+import VideoRoomScreen from '../screens/VideoRoomScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -31,14 +33,64 @@ function AuthNavigator() {
 }
 
 function MainNavigator() {
+  const dispatch = useDispatch();
+
+  const handleLogout = async () => {
+    try {
+      // Clear tokens
+      await AsyncStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+      await AsyncStorage.removeItem(STORAGE_KEYS.REFRESH_TOKEN);
+      await AsyncStorage.removeItem(STORAGE_KEYS.USER_DATA);
+      
+      // Dispatch logout action
+      dispatch(logout());
+    } catch (error) {
+      console.error('Error logging out:', error);
+    }
+  };
+
+  const LogoutButton = () => (
+    <IconButton
+      icon="logout"
+      iconColor="#fff"
+      size={24}
+      onPress={handleLogout}
+    />
+  );
+
   return (
-    <Stack.Navigator initialRouteName="Call">
+    <Stack.Navigator 
+      initialRouteName="CreateRoom"
+      screenOptions={{
+        headerStyle: {
+          backgroundColor: '#6200ee',
+        },
+        headerTintColor: '#fff',
+        headerTitleStyle: {
+          fontWeight: 'bold',
+        },
+        headerRight: () => <LogoutButton />,
+      }}
+    >
+      <Stack.Screen 
+        name="CreateRoom" 
+        component={CreateRoomScreen}
+        options={{ 
+          title: 'Video Rooms',
+        }}
+      />
+      <Stack.Screen 
+        name="VideoRoom" 
+        component={VideoRoomScreen}
+        options={{ 
+          title: 'Video Room',
+        }}
+      />
       <Stack.Screen 
         name="Call" 
         component={CallScreen}
         options={{ 
           title: 'Video Call',
-          headerShown: true 
         }}
       />
       <Stack.Screen 

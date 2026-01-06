@@ -73,6 +73,16 @@ cd chat
 zip -g ../chat.zip handler.py
 cd ..
 
+# Room Lambda
+echo -e "${BLUE}Packaging Room Lambda...${NC}"
+rm -f room.zip
+cd package
+zip -r ../room.zip . -x "*.pyc" -x "__pycache__/*" -x "*.dist-info/*"
+cd ..
+cd room
+zip -g ../room.zip handler.py
+cd ..
+
 # WebSocket Lambda
 echo -e "${BLUE}Packaging WebSocket Lambda...${NC}"
 rm -f websocket.zip
@@ -80,7 +90,7 @@ cd package
 zip -r ../websocket.zip . -x "*.pyc" -x "__pycache__/*" -x "*.dist-info/*"
 cd ..
 cd websocket
-zip -g ../websocket.zip handler.py
+zip -g ../websocket.zip handler.py room_handler.py
 cd ..
 
 echo -e "${GREEN}✓ Lambda functions packaged${NC}"

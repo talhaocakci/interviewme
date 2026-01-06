@@ -85,13 +85,22 @@ See [GITHUB_DEPLOY.md](./GITHUB_DEPLOY.md) for detailed instructions.
 
 ## Environment Variables
 
-### GitHub Secrets (Required)
+### GitHub Secrets (Only 2 Required!)
 - `AWS_ACCESS_KEY_ID` - AWS access key
 - `AWS_SECRET_ACCESS_KEY` - AWS secret key
+
+**All other secrets are stored in AWS Secrets Manager** for better security and centralized management.
+
+### AWS Secrets Manager (Automatic)
+These secrets are automatically created by Terraform and fetched during deployment:
+- `API_BASE_URL` - API Gateway URL
+- `WS_URL` - WebSocket URL  
 - `S3_BUCKET_NAME` - S3 bucket for web hosting
 - `CLOUDFRONT_DISTRIBUTION_ID` - CloudFront distribution ID
-- `API_BASE_URL` - API Gateway URL
-- `WS_URL` - WebSocket URL
+- `JWT_SECRET` - JWT signing key
+- `AWS_REGION` - AWS region
+
+See [AWS_SECRETS_MANAGER.md](./AWS_SECRETS_MANAGER.md) for details.
 
 ### Mobile App (.env)
 ```env

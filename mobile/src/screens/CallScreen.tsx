@@ -203,6 +203,7 @@ export default function CallScreen({ navigation }: any) {
 
     if (Platform.OS === 'web') {
       // For web, use a stable ref to prevent flickering
+      // Mirror only for camera, not for screen sharing
       return (
         <video
           ref={videoRef}
@@ -210,7 +211,7 @@ export default function CallScreen({ navigation }: any) {
             width: '100%',
             height: '100%',
             objectFit: 'cover',
-            transform: 'scaleX(-1)', // Mirror effect
+            transform: isScreenSharing ? 'none' : 'scaleX(-1)', // Mirror only camera
           }}
           autoPlay
           playsInline
@@ -226,7 +227,7 @@ export default function CallScreen({ navigation }: any) {
             streamURL={localStream.toURL()}
             style={styles.video}
             objectFit="cover"
-            mirror
+            mirror={!isScreenSharing} // Mirror only camera
           />
         );
       } catch (e) {

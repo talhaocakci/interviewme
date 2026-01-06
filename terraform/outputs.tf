@@ -90,3 +90,23 @@ output "web_app_url" {
   value       = "https://${aws_cloudfront_distribution.web_app.domain_name}"
 }
 
+output "secrets_manager_secret_name" {
+  description = "AWS Secrets Manager secret name"
+  value       = aws_secretsmanager_secret.app_secrets.name
+}
+
+output "secrets_manager_secret_arn" {
+  description = "AWS Secrets Manager secret ARN"
+  value       = aws_secretsmanager_secret.app_secrets.arn
+}
+
+output "github_actions_role_arn" {
+  description = "IAM Role ARN for GitHub Actions (OIDC)"
+  value       = var.github_repository != "" ? aws_iam_role.github_actions[0].arn : "Not configured - set github_repository variable"
+}
+
+output "github_oidc_provider_arn" {
+  description = "GitHub OIDC Provider ARN"
+  value       = var.github_repository != "" ? data.aws_iam_openid_connect_provider.github_existing[0].arn : "Not configured - set github_repository variable"
+}
+

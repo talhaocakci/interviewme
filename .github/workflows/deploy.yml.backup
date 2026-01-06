@@ -13,10 +13,10 @@ permissions:
   contents: read    # Required for actions/checkout
 
 env:
-  NODE_VERSION: '20'
+  NODE_VERSION: '18'
   AWS_REGION: 'us-east-1'
   AWS_SECRET_NAME: 'chatvideo-app-secrets-dev'  # Update this to match your secret name
-  AWS_ROLE_ARN: 'arn:aws:iam::348467063208:role/chatvideo-github-actions-dev'  # Auto-updated by update-workflow-role-arn.sh
+  AWS_ROLE_ARN: 'arn:aws:iam::ACCOUNT_ID:role/chatvideo-github-actions-dev'  # Update with your role ARN
 
 jobs:
   build-and-deploy:

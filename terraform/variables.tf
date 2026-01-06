@@ -43,3 +43,10 @@ variable "log_retention_days" {
   default     = 30
 }
 
+# GitHub Repository for OIDC
+variable "github_repository" {
+  description = "GitHub repository in format: owner/repo (e.g., username/interviewme)"
+  type        = string
+  default     = ""
+}
+

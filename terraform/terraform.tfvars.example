@@ -17,3 +17,8 @@ jwt_secret_key = ""
 # CloudWatch
 log_retention_days = 30
 
+# GitHub Repository for OIDC (format: owner/repo)
+# Example: "yourusername/interviewme"
+# Leave empty if not using GitHub Actions with OIDC
+github_repository = ""
+

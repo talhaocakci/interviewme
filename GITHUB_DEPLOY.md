@@ -29,11 +29,13 @@ terraform output cloudfront_domain_name
 
 ## Step 2: Configure GitHub Secrets
 
+**Important**: This setup uses AWS Secrets Manager for storing application secrets. You only need to set AWS credentials in GitHub.
+
 Add the following secrets to your GitHub repository:
 
 **Settings → Secrets and variables → Actions → New repository secret**
 
-### Required Secrets:
+### Required GitHub Secrets (Only 2!):
 
 1. **AWS_ACCESS_KEY_ID**
    - Your AWS access key ID
@@ -43,40 +45,35 @@ Add the following secrets to your GitHub repository:
    - Your AWS secret access key
    - Can be obtained from: `terraform output -raw iam_secret_access_key`
 
-3. **S3_BUCKET_NAME**
-   - S3 bucket name for web hosting
-   - Value: `terraform output -raw web_s3_bucket_name`
-
-4. **CLOUDFRONT_DISTRIBUTION_ID**
-   - CloudFront distribution ID
-   - Value: `terraform output -raw cloudfront_distribution_id`
-
-5. **API_BASE_URL**
-   - Your API Gateway URL
-   - Value: `terraform output -raw api_gateway_url`
-
-6. **WS_URL**
-   - Your WebSocket URL
-   - Value: `terraform output -raw websocket_url`
+All other secrets (API URLs, S3 bucket, CloudFront ID, etc.) are stored in AWS Secrets Manager and fetched automatically during deployment.
 
 ### To add secrets via GitHub CLI:
 
 ```bash
-# Get outputs from Terraform
-WEB_BUCKET=$(terraform output -raw web_s3_bucket_name)
-CF_DIST_ID=$(terraform output -raw cloudfront_distribution_id)
-API_URL=$(terraform output -raw api_gateway_url)
-WS_URL=$(terraform output -raw websocket_url)
+# Get AWS credentials from Terraform
 AWS_KEY=$(terraform output -raw iam_access_key_id)
 AWS_SECRET=$(terraform output -raw iam_secret_access_key)
 
-# Set GitHub secrets
+# Set GitHub secrets (only AWS credentials needed)
 gh secret set AWS_ACCESS_KEY_ID --body "$AWS_KEY"
 gh secret set AWS_SECRET_ACCESS_KEY --body "$AWS_SECRET"
-gh secret set S3_BUCKET_NAME --body "$WEB_BUCKET"
-gh secret set CLOUDFRONT_DISTRIBUTION_ID --body "$CF_DIST_ID"
-gh secret set API_BASE_URL --body "$API_URL"
-gh secret set WS_URL --body "$WS_URL"
+
+# Verify the secret name in AWS
+terraform output -raw secrets_manager_secret_name
+```
+
+### Update GitHub Actions Workflow
+
+Make sure the secret name in `.github/workflows/deploy.yml` matches your AWS Secrets Manager secret:
+
+```yaml
+env:
+  AWS_SECRET_NAME: 'chatvideo-app-secrets-dev'  # Should match terraform output
+```
+
+Get the correct name:
+```bash
+terraform output -raw secrets_manager_secret_name
 ```
 
 ## Step 3: Initialize Git Repository

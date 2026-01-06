@@ -1,0 +1,19 @@
+# AWS Configuration
+aws_region   = "us-east-1"
+project_name = "chatvideo"
+environment  = "dev"
+
+# S3 Configuration
+cors_origins = [
+  "http://localhost:19006",
+  "http://localhost:3000",
+  "https://yourdomain.com"
+]
+recording_retention_days = 90
+
+# JWT Secret (leave empty to auto-generate)
+jwt_secret_key = ""
+
+# CloudWatch
+log_retention_days = 30
+

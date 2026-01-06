@@ -1,0 +1,6 @@
+# Lambda build artifacts
+package/
+*.zip
+__pycache__/
+*.pyc
+

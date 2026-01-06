@@ -7,9 +7,16 @@ on:
       - production
   workflow_dispatch:
 
+# Required for OIDC
+permissions:
+  id-token: write   # Required for requesting the JWT
+  contents: read    # Required for actions/checkout
+
 env:
   NODE_VERSION: '18'
   AWS_REGION: 'us-east-1'
+  AWS_SECRET_NAME: 'chatvideo-app-secrets-dev'  # Update this to match your secret name
+  AWS_ROLE_ARN: 'arn:aws:iam::348467063208:role/chatvideo-github-actions-dev'  # Auto-updated by update-workflow-role-arn.sh
 
 jobs:
   build-and-deploy:
@@ -18,6 +25,31 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          role-session-name: GitHubActions-${{ github.run_id }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Fetch secrets from AWS Secrets Manager
+        id: secrets
+        run: |
+          SECRET_JSON=$(aws secretsmanager get-secret-value \
+            --secret-id ${{ env.AWS_SECRET_NAME }} \
+            --query SecretString \
+            --output text)
+          
+          # Parse JSON and set as output
+          echo "API_BASE_URL=$(echo $SECRET_JSON | jq -r '.API_BASE_URL')" >> $GITHUB_OUTPUT
+          echo "WS_URL=$(echo $SECRET_JSON | jq -r '.WS_URL')" >> $GITHUB_OUTPUT
+          echo "S3_BUCKET_NAME=$(echo $SECRET_JSON | jq -r '.S3_BUCKET_NAME')" >> $GITHUB_OUTPUT
+          echo "CLOUDFRONT_DISTRIBUTION_ID=$(echo $SECRET_JSON | jq -r '.CLOUDFRONT_DISTRIBUTION_ID')" >> $GITHUB_OUTPUT
+          
+          # Mask sensitive values in logs
+          echo "::add-mask::$(echo $SECRET_JSON | jq -r '.API_BASE_URL')"
+          echo "::add-mask::$(echo $SECRET_JSON | jq -r '.WS_URL')"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -34,8 +66,8 @@ jobs:
         working-directory: ./mobile
         run: |
           cat > .env << EOF
-          API_BASE_URL=${{ secrets.API_BASE_URL }}
-          WS_URL=${{ secrets.WS_URL }}
+          API_BASE_URL=${{ steps.secrets.outputs.API_BASE_URL }}
+          WS_URL=${{ steps.secrets.outputs.WS_URL }}
           EOF
 
       - name: Build web app
@@ -43,24 +75,17 @@ jobs:
         run: |
           npx expo export --platform web --output-dir ./web-build
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
       - name: Sync to S3
         working-directory: ./mobile
         run: |
-          aws s3 sync ./web-build s3://${{ secrets.S3_BUCKET_NAME }} \
+          aws s3 sync ./web-build s3://${{ steps.secrets.outputs.S3_BUCKET_NAME }} \
             --delete \
             --cache-control "public, max-age=31536000, immutable" \
             --exclude "*.html" \
             --exclude "asset-manifest.json"
           
           # HTML files with shorter cache for updates
-          aws s3 sync ./web-build s3://${{ secrets.S3_BUCKET_NAME }} \
+          aws s3 sync ./web-build s3://${{ steps.secrets.outputs.S3_BUCKET_NAME }} \
             --exclude "*" \
             --include "*.html" \
             --include "asset-manifest.json" \
@@ -69,15 +94,16 @@ jobs:
       - name: Invalidate CloudFront cache
         run: |
           aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} \
+            --distribution-id ${{ steps.secrets.outputs.CLOUDFRONT_DISTRIBUTION_ID }} \
             --paths "/*"
 
       - name: Deployment summary
         run: |
           echo "### Deployment Complete! 🚀" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **S3 Bucket**: ${{ secrets.S3_BUCKET_NAME }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **CloudFront Distribution**: ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **S3 Bucket**: ${{ steps.secrets.outputs.S3_BUCKET_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **CloudFront Distribution**: ${{ steps.secrets.outputs.CLOUDFRONT_DISTRIBUTION_ID }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Region**: ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
           echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Secrets Source**: AWS Secrets Manager" >> $GITHUB_STEP_SUMMARY
 

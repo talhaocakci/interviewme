@@ -265,6 +265,21 @@ class ApiService {
     });
     return response.data;
   }
+
+  // Recording endpoints
+  async getRecordingUploadUrl(roomId: string, metadata: { filename: string; contentType: string; size: number }) {
+    const response = await this.client.post('/recordings/upload-url', {
+      room_id: roomId,
+      ...metadata
+    });
+    return response.data;
+  }
+
+  async listRecordings(roomId?: string) {
+    const params = roomId ? { room_id: roomId } : {};
+    const response = await this.client.get('/recordings', { params });
+    return response.data;
+  }
 }
 
 export default new ApiService();

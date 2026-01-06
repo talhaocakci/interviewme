@@ -27,6 +27,11 @@ export default function VideoRoomScreen() {
   const reconnectAttemptsRef = useRef(0);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const maxReconnectAttempts = 3;
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -504,13 +509,149 @@ export default function VideoRoomScreen() {
     }
   };
 
+  const startRecording = async () => {
+    try {
+      console.log('🎥 Starting recording...');
+      
+      // Create a combined stream with local and remote audio/video
+      const combinedStream = new MediaStream();
+      
+      // Add local stream tracks
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach(track => {
+          combinedStream.addTrack(track);
+        });
+      }
+      
+      // Add remote stream tracks if available
+      if (remoteVideoRef.current && remoteVideoRef.current.srcObject) {
+        const remoteStream = remoteVideoRef.current.srcObject as MediaStream;
+        remoteStream.getTracks().forEach(track => {
+          combinedStream.addTrack(track);
+        });
+      }
+      
+      // Create MediaRecorder
+      const options = { mimeType: 'video/webm;codecs=vp8,opus' };
+      const mediaRecorder = new MediaRecorder(combinedStream, options);
+      mediaRecorderRef.current = mediaRecorder;
+      recordedChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data && event.data.size > 0) {
+          recordedChunksRef.current.push(event.data);
+          console.log(`Recorded chunk: ${event.data.size} bytes`);
+        }
+      };
+      
+      mediaRecorder.onstop = async () => {
+        console.log('🎬 Recording stopped, processing...');
+        await handleRecordingStopped();
+      };
+      
+      mediaRecorder.start(1000); // Capture data every second
+      setIsRecording(true);
+      setRecordingDuration(0);
+      
+      // Start duration timer
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+      
+      console.log('✅ Recording started');
+    } catch (err) {
+      console.error('❌ Error starting recording:', err);
+      setError('Failed to start recording. Please try again.');
+    }
+  };
+
+  const stopRecording = () => {
+    console.log('⏹️ Stopping recording...');
+    
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+      
+      // Stop timer
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+    }
+  };
+
+  const handleRecordingStopped = async () => {
+    try {
+      const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+      const sizeInMB = (blob.size / (1024 * 1024)).toFixed(2);
+      console.log(`📦 Recording size: ${sizeInMB} MB`);
+      
+      // Get presigned URL from backend
+      console.log('📤 Requesting upload URL...');
+      const uploadData = await apiService.getRecordingUploadUrl(roomId!, {
+        filename: `recording-${Date.now()}.webm`,
+        contentType: 'video/webm',
+        size: blob.size
+      });
+      
+      console.log('📤 Uploading to S3...');
+      // Upload to S3 using presigned URL
+      const uploadResponse = await fetch(uploadData.upload_url, {
+        method: 'PUT',
+        body: blob,
+        headers: {
+          'Content-Type': 'video/webm',
+        },
+      });
+      
+      if (!uploadResponse.ok) {
+        throw new Error(`Upload failed: ${uploadResponse.statusText}`);
+      }
+      
+      console.log('✅ Recording uploaded successfully!');
+      alert(`Recording saved! (${sizeInMB} MB)`);
+      
+      // Clear recorded chunks
+      recordedChunksRef.current = [];
+    } catch (err: any) {
+      console.error('❌ Error uploading recording:', err);
+      setError('Failed to upload recording. Please try again.');
+      
+      // Offer download as fallback
+      const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `recording-${Date.now()}.webm`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  };
+
+  const formatRecordingDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const cleanup = () => {
     console.log('🧹 Cleaning up room...');
+    
+    // Stop recording if active
+    if (isRecording) {
+      stopRecording();
+    }
     
     // Clear reconnection timeout
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
+    }
+    
+    // Clear recording timer
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
     }
     
     // Stop local stream
@@ -614,6 +755,16 @@ export default function VideoRoomScreen() {
         />
         
         <IconButton
+          icon={isRecording ? 'stop-circle' : 'record-circle'}
+          mode="contained"
+          containerColor={isRecording ? '#ff9800' : '#2196f3'}
+          iconColor="#fff"
+          size={30}
+          onPress={isRecording ? stopRecording : startRecording}
+          disabled={!remotePeerId}
+        />
+        
+        <IconButton
           icon="phone-hangup"
           mode="contained"
           containerColor="#f44336"
@@ -635,6 +786,14 @@ export default function VideoRoomScreen() {
           <Text style={styles.reconnectText}>
             Attempt {reconnectAttemptsRef.current}/{maxReconnectAttempts}
           </Text>
+        )}
+        {isRecording && (
+          <View style={styles.recordingIndicator}>
+            <View style={styles.recordingDot} />
+            <Text style={styles.recordingText}>
+              REC {formatRecordingDuration(recordingDuration)}
+            </Text>
+          </View>
         )}
         <Text style={styles.debugText}>
           🔌 {connectionState} | 🧊 {iceConnectionState}
@@ -762,6 +921,27 @@ const styles = StyleSheet.create({
     color: '#ff9800',
     fontSize: 11,
     marginTop: 2,
+    fontWeight: 'bold',
+  },
+  recordingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 6,
+    backgroundColor: 'rgba(244, 67, 54, 0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  recordingDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#f44336',
+    marginRight: 6,
+  },
+  recordingText: {
+    color: '#f44336',
+    fontSize: 12,
     fontWeight: 'bold',
   },
   debugText: {

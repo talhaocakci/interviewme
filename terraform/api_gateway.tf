@@ -168,6 +168,26 @@ resource "aws_apigatewayv2_route" "leave_room" {
   target    = "integrations/${aws_apigatewayv2_integration.room.id}"
 }
 
+# Recordings Integration
+resource "aws_apigatewayv2_integration" "recordings" {
+  api_id           = aws_apigatewayv2_api.main.id
+  integration_type = "AWS_PROXY"
+  integration_uri  = aws_lambda_function.recordings.invoke_arn
+  payload_format_version = "2.0"
+}
+
+resource "aws_apigatewayv2_route" "get_upload_url" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "POST /recordings/upload-url"
+  target    = "integrations/${aws_apigatewayv2_integration.recordings.id}"
+}
+
+resource "aws_apigatewayv2_route" "list_recordings" {
+  api_id    = aws_apigatewayv2_api.main.id
+  route_key = "GET /recordings"
+  target    = "integrations/${aws_apigatewayv2_integration.recordings.id}"
+}
+
 # WebSocket API
 resource "aws_apigatewayv2_api" "websocket" {
   name                       = "${var.project_name}-websocket-${var.environment}"

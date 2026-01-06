@@ -56,6 +56,7 @@ output "lambda_functions" {
     auth                 = aws_lambda_function.auth.function_name
     chat                 = aws_lambda_function.chat.function_name
     room                 = aws_lambda_function.room.function_name
+    recordings           = aws_lambda_function.recordings.function_name
     websocket_connect    = aws_lambda_function.websocket_connect.function_name
     websocket_disconnect = aws_lambda_function.websocket_disconnect.function_name
     websocket_message    = aws_lambda_function.websocket_message.function_name

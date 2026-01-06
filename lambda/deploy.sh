@@ -83,6 +83,16 @@ cd room
 zip -g ../room.zip handler.py
 cd ..
 
+# Recordings Lambda
+echo -e "${BLUE}Packaging Recordings Lambda...${NC}"
+rm -f recordings.zip
+cd package
+zip -r ../recordings.zip . -x "*.pyc" -x "__pycache__/*" -x "*.dist-info/*"
+cd ..
+cd recordings
+zip -g ../recordings.zip handler.py
+cd ..
+
 # WebSocket Lambda
 echo -e "${BLUE}Packaging WebSocket Lambda...${NC}"
 rm -f websocket.zip
